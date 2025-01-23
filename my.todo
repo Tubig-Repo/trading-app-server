@@ -1,0 +1,10 @@
+# Building the Server 
+
+## 1. Setup 
+
+- ** Setup the API's from bybit ** 
+  ☐  Get the KLine historical data from bybit 
+  ☐  Get the live data from bybit start from BTC Ticker
+  ☐  Get the Trade History from my demo account 
+  
+
