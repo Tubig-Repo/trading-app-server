@@ -2,8 +2,9 @@ const express = require("express");
 const app = express();
 const cors = require("cors");
 const axios = require("axios");
-const WebSocket = require("ws");
-const { Server } = require("ws");
+const createWebSocketServer = require("./websocketServer.js");
+const crypto = require("crypto");
+require("dotenv").config();
 
 // Accept Request from the front end
 const corsOptions = {
@@ -14,20 +15,18 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-app.get("/api", async (req, res) => {
-  res.json({ fruits: ["Apple", "Orange", "Grapes"] });
-});
 // Get BTC Kline Data
 app.get("/btc", async (req, res) => {
+  // Hardcoded Request but should be from the front end
   const {
     symbol = "BTCUSDT",
     interval = "1",
     limit = 200,
-    category = "inverse",
+    category = "linear",
   } = req.query;
-
+  // End point for kline data
   const url = "https://api.bybit.com/v5/market/kline";
-
+  // fetch properties only needed for the front-end
   const response = await axios.get(url, {
     params: {
       category,
@@ -36,7 +35,7 @@ app.get("/btc", async (req, res) => {
       limit,
     },
   });
-
+  // Format data where charts can read it to the front-end
   const klineData = response.data.result.list
     .map((item) => ({
       time: Math.floor(new Date(parseInt(item[0])).getTime() / 1000),
@@ -53,78 +52,63 @@ app.get("/btc", async (req, res) => {
   });
 });
 
-// Get Live Data VIA WebSocket
-// WebSocket server for clients
-const webSocketServer = new Server({ port: 3000, path: "/live" });
+app.get("/history", async (req, res) => {
+  try {
+    // Hardcoded request that should be from the front end request
+    const {
+      symbol = "BTCUSDT",
+      category = "linear",
+      execType = "Trade",
+    } = req.query;
+    // End point for trade history
+    const url = "https://api-demo.bybit.com/v5/execution/list";
+    // API KEYS and Secret
+    const API_KEY = process.env.API_KEY;
+    const API_SECRET = process.env.API_SECRET;
+    // Parameters for getting the data and API Key
+    const params = {
+      symbol,
+      category,
+      execType,
+      api_key: API_KEY,
+      timestamp: Date.now(),
+    };
 
-webSocketServer.on("connection", (ws) => {
-  console.log("Client connected");
+    // Generate HMAC Signature
+    const queryString = Object.keys(params)
+      .sort()
+      .map((key) => `${key}=${params[key]}`)
+      .join("&");
 
-  // Initialize Bybit WebSocket when the first client connects
+    const signature = crypto
+      .createHmac("sha256", API_SECRET)
+      .update(queryString)
+      .digest("hex");
 
-  bybitSocket = new WebSocket("wss://stream.bybit.com/v5/public/linear");
+    // Sign the signature
+    params.sign = signature;
 
-  bybitSocket.on("open", () => {
-    console.log("Connected to Bybit WebSocket");
-    bybitSocket.send(
-      JSON.stringify({
-        op: "subscribe",
-        args: ["kline.1.BTCUSDT"],
-      })
-    );
-  });
+    // Make the request
+    const response = await axios.get(url, { params });
 
-  bybitSocket.on("message", (data) => {
-    const parsedData = JSON.parse(data);
-    const liveData = parsedData.data;
-    console.log(liveData);
+    console.log(response.data.result);
 
-    if (parsedData.topic === "kline.1.BTCUSDT" && liveData.length > 0) {
-      const timeStamp =
-        liveData.length > 0 && liveData[0].timestamp
-          ? Math.floor(
-              new Date(parseInt(liveData[0].timestamp)).getTime() / 1000
-            )
-          : null;
-
-      const message = JSON.stringify({
-        time: timeStamp,
-        open: parseFloat(liveData[0].open),
-        high: parseFloat(liveData[0].high),
-        low: parseFloat(liveData[0].low),
-        close: parseFloat(liveData[0].close),
-        confirm: liveData[0].confirm,
-      });
-
-      // Broadcast data to all connected clients
-      webSocketServer.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(message);
-        }
-      });
-    }
-  });
-
-  bybitSocket.on("error", (error) => {
-    console.error("Error with Bybit WebSocket:", error);
-  });
-
-  bybitSocket.on("close", () => {
-    console.log("Bybit WebSocket closed");
-    bybitSocket = null; // Clear the reference
-  });
-
-  // Handle client disconnection
-  ws.on("close", () => {
-    console.log("Client disconnected");
-
-    // Close Bybit WebSocket when no clients are connected
-    if (bybitSocket) {
-      bybitSocket.close();
-      bybitSocket = null;
-    }
-  });
+    res.json({
+      success: true,
+      data: response.data.result,
+    });
+  } catch (err) {
+    console.error("Error fetching order history:", err.message);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch order history",
+    });
+  }
 });
+
+// Get Live Data VIA WebSocket
+createWebSocketServer(3000);
+
 app.listen(8080, () => {
   console.log("server started on port 8080");
 });

@@ -3,8 +3,13 @@
 ## 1. Setup 
 
 - ** Setup the API's from bybit ** 
+  Kline Data API
   ☐  Get the KLine historical data from bybit 
   ☐  Get the live data from bybit start from BTC Ticker
+  ☐  Try implementing where user can request for a specific ticker and timeframe
+  ☐  Implement being able to make a trade when clicking on the chart
+  Trade History API
   ☐  Get the Trade History from my demo account 
+  ☐ 
   
 
